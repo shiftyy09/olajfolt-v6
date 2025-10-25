@@ -1,3 +1,4 @@
+// lib/kepernyok/jarmuvek/jarmu_hozzaadasa.dart
 import 'package:flutter/material.dart';
 import '../../alap/adatbazis/adatbazis_kezelo.dart';
 import '../../modellek/jarmu.dart';
@@ -17,19 +18,16 @@ class JarmuHozzaadasaKepernyo extends StatefulWidget {
 }
 
 class _JarmuHozzaadasaKepernyoState extends State<JarmuHozzaadasaKepernyo> {
-  int _currentStep = 0;
-  final _formKeys = [
-    GlobalKey<FormState>(),
-    GlobalKey<FormState>(),
-    GlobalKey<FormState>()
-  ];
+  final _alapadatokFormKey = GlobalKey<FormState>();
+  final _muszakiAdatokFormKey = GlobalKey<FormState>();
+
   String? _selectedMake;
   late TextEditingController _modelController;
   late TextEditingController _yearController;
   late TextEditingController _licensePlateController;
   late TextEditingController _vinController;
   late TextEditingController _mileageController;
-  String _selectedVezerlesTipus = 'Szíj';
+  String _selectedVezerlesTipusa = 'Szíj';
   bool _remindersEnabled = false;
   final Map<String, TextEditingController> _kmBasedServiceControllers = {};
   final Map<String, DateTime?> _dateBasedServiceDates = {};
@@ -148,14 +146,16 @@ class _JarmuHozzaadasaKepernyoState extends State<JarmuHozzaadasaKepernyo> {
     _vinController = TextEditingController(text: widget.vehicleToEdit?.vin);
     _mileageController =
         TextEditingController(text: widget.vehicleToEdit?.mileage?.toString());
-    _selectedVezerlesTipus = widget.vehicleToEdit?.vezerlesTipusa ?? 'Szíj';
-
+    _selectedVezerlesTipusa = widget.vehicleToEdit?.vezerlesTipusa ?? 'Szíj';
     if (_selectedMake != null && !_supportedCarMakes.contains(_selectedMake)) {
-      if (_selectedMake!.isNotEmpty) _supportedCarMakes.insert(
-          0, _selectedMake!);
+      if (_selectedMake!.isNotEmpty) {
+        _supportedCarMakes.insert(0, _selectedMake!);
+      }
     }
     _mileageController.addListener(() {
-      if (_remindersEnabled) setState(() => _validateAllServices());
+      if (_remindersEnabled) {
+        setState(() => _validateAllServices());
+      }
     });
   }
 
@@ -237,38 +237,6 @@ class _JarmuHozzaadasaKepernyoState extends State<JarmuHozzaadasaKepernyo> {
 
   Future<void> _saveOrUpdateVehicle() async {
     FocusScope.of(context).unfocus();
-    if (_selectedMake == null || _selectedMake!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('A márka kiválasztása kötelező!'),
-          backgroundColor: Colors.redAccent));
-      return;
-    }
-    if (!_formKeys.every((key) => key.currentState?.validate() ?? true)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Kérjük, javítsd a pirossal jelölt hibákat!'),
-          backgroundColor: Colors.redAccent));
-      return;
-    }
-    final newMileage = int.tryParse(_mileageController.text);
-    if (widget.vehicleToEdit != null && newMileage != null) {
-      if (newMileage < widget.vehicleToEdit!.mileage) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(
-            'A kilométeróra-állás nem lehet kevesebb a korábban rögzítettnél!'),
-            backgroundColor: Colors.redAccent));
-        return;
-      }
-    }
-    if (_remindersEnabled) {
-      _validateAllServices();
-      await Future.delayed(const Duration(milliseconds: 50));
-      if (_serviceErrors.values.any((e) => e != null)) {
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Az emlékeztetőkben hibás adatok vannak!'),
-            backgroundColor: Colors.redAccent));
-        return;
-      }
-    }
 
     setState(() => _isLoading = true);
 
@@ -277,15 +245,16 @@ class _JarmuHozzaadasaKepernyoState extends State<JarmuHozzaadasaKepernyo> {
       make: _selectedMake!,
       model: _modelController.text,
       year: int.tryParse(_yearController.text) ?? 0,
-      licensePlate: _licensePlateController.text,
-      vin: _vinController.text.isEmpty ? null : _vinController.text,
+      licensePlate: _licensePlateController.text.toUpperCase(),
+      vin: _vinController.text.isEmpty ? null : _vinController.text.toUpperCase(),
       mileage: int.tryParse(_mileageController.text) ?? 0,
-      vezerlesTipusa: _selectedVezerlesTipus,
-      imagePath: null, // Kép nincs
+      vezerlesTipusa: _selectedVezerlesTipusa,
+      imagePath: null,
     );
 
     final db = AdatbazisKezelo.instance;
     int vehicleId;
+
     if (widget.vehicleToEdit == null) {
       vehicleId = await db.insert('vehicles', vehicle.toMap());
     } else {
@@ -293,16 +262,27 @@ class _JarmuHozzaadasaKepernyoState extends State<JarmuHozzaadasaKepernyo> {
       vehicleId = vehicle.id!;
     }
 
+    // ✅ CSAK AZ EMLÉKEZTETŐKET VALIDÁLD
     if (_remindersEnabled) {
+      _validateAllServices();
+
+      if (_serviceErrors.values.any((e) => e != null)) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Az emlékeztetőkben hibás adatok vannak!'),
+              backgroundColor: Colors.redAccent));
+        }
+        return;
+      }
+
       for (var type in _allServiceTypes) {
         final description = 'Emlékeztető alap: $type';
         final existingRecord = await db.findServiceByDescription(
             vehicleId, description);
-
         if (_serviceEnabledStates[type] == true) {
           int mileage = 0;
           DateTime date = DateTime.now();
-
           if (_dateBasedServiceTypes.contains(type)) {
             if (_dateBasedServiceDates[type] == null) continue;
             date = _dateBasedServiceDates[type]!;
@@ -311,16 +291,14 @@ class _JarmuHozzaadasaKepernyoState extends State<JarmuHozzaadasaKepernyo> {
             if (controller.text.isEmpty) continue;
             mileage = int.parse(controller.text);
           }
-
           final service = Szerviz(
-              id: existingRecord?.id,
-              vehicleId: vehicleId,
-              date: date,
-              mileage: mileage,
-              description: description,
-              cost: 0
+            id: existingRecord?.id,
+            vehicleId: vehicleId,
+            date: date,
+            mileage: mileage,
+            description: description,
+            cost: 0,
           );
-
           if (existingRecord != null) {
             await db.update('services', service.toMap());
           } else {
@@ -347,219 +325,116 @@ class _JarmuHozzaadasaKepernyoState extends State<JarmuHozzaadasaKepernyo> {
     }
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        title: Text(
-            widget.vehicleToEdit == null ? 'Új Jármű' : 'Jármű Szerkesztése'),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+      appBar: AppBar(title: Text(
+          widget.vehicleToEdit == null ? 'Új Jármű' : 'Jármű Szerkesztése'),
+          centerTitle: true,
+          backgroundColor: Colors.transparent,
+          elevation: 0),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        children: [
+          _buildSectionHeader('Alapadatok'),
+          Form(
+            key: _alapadatokFormKey,
+            child: JarmuAlapadatokWidget(
+              selectedMake: _selectedMake,
+              onMakeChanged: (v) => setState(() => _selectedMake = v),
+              modelController: _modelController,
+              yearController: _yearController,
+              licensePlateController: _licensePlateController,
+              vinController: _vinController,
+              mileageController: _mileageController,
+              supportedCarMakes: _supportedCarMakes,
+              vezerlesOptions: _vezerlesOptions,
+              isFirstStep: true,
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionHeader('Azonosítók és Műszaki Adatok'),
+          Form(
+            key: _muszakiAdatokFormKey,
+            child: JarmuAlapadatokWidget(
+              selectedMake: _selectedMake,
+              onMakeChanged: (v) {},
+              modelController: _modelController,
+              yearController: _yearController,
+              licensePlateController: _licensePlateController,
+              vinController: _vinController,
+              mileageController: _mileageController,
+              selectedVezerlesTipusa: _selectedVezerlesTipusa,
+              onVezerlesChanged: (v) =>
+                  setState(() {
+                    if (v != null) _selectedVezerlesTipusa = v;
+                  }),
+              supportedCarMakes: _supportedCarMakes,
+              vezerlesOptions: _vezerlesOptions,
+              isSecondStep: true,
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildSectionHeader('Karbantartási Emlékeztetők (Opcionális)'),
+          EmlekeztetoKapcsoloWidget(isEnabled: _remindersEnabled,
+              onToggle: (value) => setState(() => _remindersEnabled = value)),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            child: _remindersEnabled ? EmlekeztetoTartalomWidget(
+              kmBasedServiceControllers: _kmBasedServiceControllers,
+              dateBasedServiceDates: _dateBasedServiceDates,
+              serviceEnabledStates: _serviceEnabledStates,
+              serviceErrors: _serviceErrors,
+              onKmChanged: (type, value) {
+                setState(() => _validateService(type, value));
+              },
+              onDateChanged: (type, date) {
+                setState(() => _dateBasedServiceDates[type] = date);
+              },
+              onToggle: (String type, bool value) {
+                setState(() {
+                  _serviceEnabledStates[type] = value;
+                  if (_kmBasedServiceTypes.contains(type)) {
+                    final controller = _kmBasedServiceControllers[type]!;
+                    if (value && controller.text.isEmpty &&
+                        _mileageController.text.isNotEmpty) {
+                      controller.text = _mileageController.text;
+                    }
+                    _validateService(type, controller.text, isFromToggle: true);
+                    if (!value) {
+                      controller.clear();
+                      _serviceErrors[type] = null;
+                    }
+                  }
+                });
+              },
+              dateBasedServiceTypes: _dateBasedServiceTypes,
+              kmBasedServiceTypes: _kmBasedServiceTypes,
+            ) : const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 80),
+        ],
       ),
-      body: Theme(
-        data: Theme.of(context).copyWith(
-          canvasColor: const Color(0xFF121212),
-          colorScheme: const ColorScheme.dark(primary: Colors.orange),
-        ),
-        child: Stepper(
-          margin: const EdgeInsets.all(0),
-          controlsBuilder: (context, details) {
-            return Container(
-              margin: const EdgeInsets.only(top: 30),
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: _build3DButton(
-                      text: _currentStep == 2 ? 'MENTÉS' : 'TOVÁBB',
-                      onPressed: details.onStepContinue,
-                      color: Colors.orange,
-                    ),
-                  ),
-                  if (_currentStep > 0) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _build3DButton(
-                        text: 'VISSZA',
-                        onPressed: details.onStepCancel,
-                        color: Colors.grey.shade800,
-                        isPrimary: false,
-                      ),
-                    ),
-                  ]
-                ],
-              ),
-            );
-          },
-          type: StepperType.vertical,
-          currentStep: _currentStep,
-          onStepTapped: (step) => setState(() => _currentStep = step),
-          onStepContinue: () {
-            if (_currentStep < 2 &&
-                _formKeys[_currentStep].currentState!.validate()) {
-              setState(() => _currentStep += 1);
-            } else if (_currentStep == 2) {
-              _saveOrUpdateVehicle();
-            }
-          },
-          onStepCancel: _currentStep == 0 ? null : () =>
-              setState(() => _currentStep -= 1),
-          steps: [
-            _buildStep(
-              title: 'Alapadatok',
-              content: Form(
-                key: _formKeys[0],
-                child: JarmuAlapadatokWidget(
-                  selectedMake: _selectedMake,
-                  onMakeChanged: (v) => setState(() => _selectedMake = v),
-                  modelController: _modelController,
-                  yearController: _yearController,
-                  licensePlateController: TextEditingController(),
-                  // Dummy
-                  vinController: TextEditingController(),
-                  // Dummy
-                  mileageController: TextEditingController(),
-                  // Dummy
-                  selectedVezerlesTipus: _selectedVezerlesTipus,
-                  onVezerlesChanged: (v) {},
-                  supportedCarMakes: _supportedCarMakes,
-                  vezerlesOptions: _vezerlesOptions,
-                  isFirstStep: true,
-                ),
-              ),
-              isActive: _currentStep >= 0,
-            ),
-            _buildStep(
-              title: 'Azonosítók és Műszaki Adatok',
-              content: Form(
-                key: _formKeys[1],
-                child: JarmuAlapadatokWidget(
-                  selectedMake: _selectedMake,
-                  onMakeChanged: (v) {},
-                  modelController: _modelController,
-                  yearController: _yearController,
-                  licensePlateController: _licensePlateController,
-                  vinController: _vinController,
-                  mileageController: _mileageController,
-                  selectedVezerlesTipus: _selectedVezerlesTipus,
-                  onVezerlesChanged: (v) =>
-                      setState(() {
-                        if (v != null) _selectedVezerlesTipus = v;
-                      }),
-                  supportedCarMakes: _supportedCarMakes,
-                  vezerlesOptions: _vezerlesOptions,
-                  isSecondStep: true,
-                ),
-              ),
-              isActive: _currentStep >= 1,
-            ),
-            _buildStep(
-              title: 'Karbantartási Emlékeztetők (Opcionális)',
-              content: Form(
-                key: _formKeys[2],
-                child: Column(
-                  children: [
-                    EmlekeztetoKapcsoloWidget(
-                      isEnabled: _remindersEnabled,
-                      onToggle: (value) =>
-                          setState(() => _remindersEnabled = value),
-                    ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      child: _remindersEnabled
-                          ? EmlekeztetoTartalomWidget(
-                        kmBasedServiceControllers: _kmBasedServiceControllers,
-                        dateBasedServiceDates: _dateBasedServiceDates,
-                        serviceEnabledStates: _serviceEnabledStates,
-                        serviceErrors: _serviceErrors,
-                        onKmChanged: (type, value) {
-                          setState(() => _validateService(type, value));
-                        },
-                        onDateChanged: (type, date) {
-                          setState(() => _dateBasedServiceDates[type] = date);
-                        },
-                        onToggle: (String type, bool value) {
-                          setState(() {
-                            _serviceEnabledStates[type] = value;
-                            if (_kmBasedServiceTypes.contains(type)) {
-                              final controller = _kmBasedServiceControllers[type]!;
-                              if (value && controller.text.isEmpty &&
-                                  _mileageController.text.isNotEmpty) {
-                                controller.text = _mileageController.text;
-                              }
-                              _validateService(
-                                  type, controller.text, isFromToggle: true);
-                              if (!value) {
-                                controller.clear();
-                                _serviceErrors[type] = null;
-                              }
-                            }
-                          });
-                        },
-                        selectedVezerlesTipus: _selectedVezerlesTipus,
-                        dateBasedServiceTypes: _dateBasedServiceTypes,
-                        kmBasedServiceTypes: _kmBasedServiceTypes,
-                      )
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
-                ),
-              ),
-              isActive: _currentStep >= 2,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _saveOrUpdateVehicle,
         backgroundColor: Colors.orange,
-        tooltip: 'Jármű mentése',
-        child: const Icon(Icons.save, color: Colors.black),
+        label: const Text('Mentés',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+        icon: const Icon(Icons.save, color: Colors.black),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
-  Widget _build3DButton(
-      {required String text, required VoidCallback? onPressed, required Color color, bool isPrimary = true}) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(color: isPrimary ? Colors.black.withOpacity(0.4) : Colors
-                .transparent, offset: const Offset(0, 4), blurRadius: 8,),
-          ],
-          border: isPrimary ? null : Border.all(
-              color: Colors.grey.shade500, width: 1.5),
-        ),
-        child: Center(
-          child: Text(text, style: TextStyle(
-            color: isPrimary ? Colors.black : Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,),
-          ),
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0, top: 8.0),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.orange.shade700,
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.1,
         ),
       ),
     );
-  }
-
-  Step _buildStep(
-      {required String title, required Widget content, bool isActive = false}) {
-    int stepIndex = _getStepIndex(title);
-    return Step(
-      title: Text(title, style: const TextStyle(
-          color: Colors.white, fontWeight: FontWeight.bold)),
-      content: content,
-      state: _currentStep > stepIndex ? StepState.complete : (_currentStep ==
-          stepIndex ? StepState.editing : StepState.indexed),
-      isActive: _currentStep >= stepIndex,
-    );
-  }
-
-  int _getStepIndex(String title) {
-    if (title == 'Alapadatok') return 0;
-    if (title == 'Azonosítók és Műszaki Adatok') return 1;
-    if (title == 'Karbantartási Emlékeztetők (Opcionális)') return 2;
-    return 0;
   }
 }

@@ -127,7 +127,7 @@ class PdfSzolgaltatas {
       final domain = brand.toLowerCase().replaceAll(' ', '') + '.com';
       final url = Uri.parse('https://logo.clearbit.com/$domain');
       final response = await http
-          .get(url, headers: {'User-Agent': 'car_maintenance_app/1.0'});
+          .get(url, headers: {'User-Agent': 'olajfolt/1.0'});
       if (response.statusCode == 200) {
         return pw.MemoryImage(response.bodyBytes);
       }

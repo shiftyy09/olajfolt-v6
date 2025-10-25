@@ -1,7 +1,8 @@
 // lib/kepernyok/indito/indito_kepernyo.dart
 import 'package:flutter/material.dart';
-import '../../alap/adatbazis/adatbazis_kezelo.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../fooldal/fooldal_kepernyo.dart';
+import 'onboarding_kepernyo.dart';
 
 class InditoKepernyo extends StatefulWidget {
   const InditoKepernyo({super.key});
@@ -10,73 +11,81 @@ class InditoKepernyo extends StatefulWidget {
   State<InditoKepernyo> createState() => _InditoKepernyoState();
 }
 
-class _InditoKepernyoState extends State<InditoKepernyo>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
+class _InditoKepernyoState extends State<InditoKepernyo> {
+  bool _isLoading = true;
+  bool _hasCompletedOnboarding = false;
 
   @override
   void initState() {
     super.initState();
-    _setupAnimation();
-    _initializeApp();
+    _checkOnboardingStatus();
   }
 
-  void _setupAnimation() {
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
+  Future<void> _checkOnboardingStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final completed = prefs.getBool('onboarding_completed') ?? false;
 
-    _fadeAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-  }
+    setState(() {
+      _hasCompletedOnboarding = completed;
+      _isLoading = false;
+    });
 
-  void _initializeApp() async {
-    // Elindítjuk az adatbázis betöltését és egy minimális várakozási időt
-    final dbFuture = AdatbazisKezelo.instance.database;
-    final minDelayFuture =
-        Future.delayed(const Duration(milliseconds: 2000)); // 2 másodperc
-
-    // Megvárjuk, amíg mindkettő befejeződik
-    await Future.wait([dbFuture, minDelayFuture]);
-
-    // Navigáció, csak ha a képernyő még létezik
     if (mounted) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const FooldalKepernyo(),
-          transitionsBuilder: (_, animation, __, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
-    }
-  }
+      if (!completed) {
+        // Onboarding nem volt elvégezve - mutasd meg
+        final result = await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const OnboardingKepernyo(),
+            fullscreenDialog: true,
+          ),
+        );
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
+        // Ha befejezték az onboardingot, megy tovább
+        if (result == true && mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const FooldalKepernyo()),
+          );
+        }
+      } else {
+        // Onboarding már elvégezve - megy az főoldalra
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const FooldalKepernyo()),
+            );
+          }
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF121212),
       body: Center(
-        // A Column-t kivettem, mert már csak egyetlen widget, a kép van benne.
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: Image.asset(
-            'assets/images/olajfolt.png',
-            width: 250,
-            fit: BoxFit.contain,
-          ),
-        ),
-        // A Text("Szerviz-napló") és a SizedBox innen lett eltávolítva.
+        child: _isLoading
+            ? Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.directions_car,
+              size: 64,
+              color: Colors.orange.shade400,
+            ),
+            const SizedBox(height: 24),
+            const CircularProgressIndicator(
+              valueColor:
+              AlwaysStoppedAnimation(Colors.orange),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Olajfolt betöltése...',
+              style: TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+          ],
+        )
+            : const SizedBox.shrink(),
       ),
     );
   }
