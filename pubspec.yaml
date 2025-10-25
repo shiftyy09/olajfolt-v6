@@ -3,11 +3,8 @@ description: Egy egyszerű autókarbantartó alkalmazás Flutterben.
 publish_to: 'none'
 version: 1.0.0+1
 
-# === JAVÍTOTT RÉSZ ===
-# Az 'environment'-nek és az 'sdk'-nak külön sorban kell lennie.
 environment:
   sdk: '>=3.0.0 <4.0.0'
-# ======================
 
 dependencies:
   flutter:

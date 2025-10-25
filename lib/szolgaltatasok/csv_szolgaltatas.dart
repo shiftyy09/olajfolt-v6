@@ -19,12 +19,7 @@ class CsvSzolgaltatas {
 
     final db = AdatbazisKezelo.instance;
     final List<Map<String, dynamic>> vehicles = await db.getVehicles();
-
-    // === ITT VAN A JAVÍTÁS ===
-    // A 'getServices' helyett a helyes, általános 'queryAllRows' metódust hívjuk.
-    final List<Map<String, dynamic>> services = await db.queryAllRows(
-        'services');
-    // ========================
+    final List<Map<String, dynamic>> services = await db.queryAllRows('services');
 
     if (vehicles.isEmpty && services.isEmpty) {
       return "empty";
@@ -71,8 +66,7 @@ class CsvSzolgaltatas {
         return null;
       }
 
-      final String formattedDate = DateFormat('yyyy-MM-dd_HH-mm').format(
-          DateTime.now());
+      final String formattedDate = DateFormat('yyyy-MM-dd_HH-mm').format(DateTime.now());
       final String fileName = "olajfolt_mentes_$formattedDate.csv";
       final File file = File("${directory.path}/$fileName");
 
@@ -97,13 +91,10 @@ class CsvSzolgaltatas {
     File file = File(result.files.single.path!);
     try {
       final String content = await file.readAsString();
-      if (content
-          .trim()
-          .isEmpty) {
+      if (content.trim().isEmpty) {
         return ImportResult.emptyFile;
       }
-      if (!content.contains('---VEHICLES---') ||
-          !content.contains('---SERVICES---')) {
+      if (!content.contains('---VEHICLES---') || !content.contains('---SERVICES---')) {
         return ImportResult.invalidFormat;
       }
 
@@ -115,58 +106,30 @@ class CsvSzolgaltatas {
       await db.clearAllData();
 
       if (vehiclePart.isNotEmpty) {
-        List<List<dynamic>> vehicleRows = const CsvToListConverter(
-            shouldParseNumbers: false).convert(vehiclePart);
+        List<List<dynamic>> vehicleRows = const CsvToListConverter(shouldParseNumbers: false).convert(vehiclePart);
         if (vehicleRows.length > 1) {
-          List<String> headers = vehicleRows[0]
-              .map((h) => h.toString())
-              .toList();
+          List<String> headers = vehicleRows[0].map((h) => h.toString()).toList();
           for (int i = 1; i < vehicleRows.length; i++) {
-            Map<String, dynamic> rowMap = Map.fromIterables(
-                headers, vehicleRows[i]);
-
-            // Típuskonverziók a biztonság kedvéért
+            Map<String, dynamic> rowMap = Map.fromIterables(headers, vehicleRows[i]);
             rowMap['id'] = int.tryParse(rowMap['id']?.toString() ?? '');
             rowMap['year'] = int.tryParse(rowMap['year']?.toString() ?? '');
-            rowMap['mileage'] =
-                int.tryParse(rowMap['mileage']?.toString() ?? '');
-
-            // Kihagyjuk azokat az oszlopokat, amik esetleg nincsenek a sémában
-            rowMap.removeWhere((key, value) =>
-            ![
-              'id',
-              'make',
-              'model',
-              'year',
-              'licensePlate',
-              'vin',
-              'mileage',
-              'vezerlesTipusa',
-              'imagePath'
-            ].contains(key));
-
+            rowMap['mileage'] = int.tryParse(rowMap['mileage']?.toString() ?? '');
+            rowMap.removeWhere((key, value) => !['id', 'make', 'model', 'year', 'licensePlate', 'vin', 'mileage', 'vezerlesTipusa', 'imagePath'].contains(key));
             await db.insert('vehicles', rowMap);
           }
         }
       }
 
       if (servicePart.isNotEmpty) {
-        List<List<dynamic>> serviceRows = const CsvToListConverter(
-            shouldParseNumbers: false).convert(servicePart);
+        List<List<dynamic>> serviceRows = const CsvToListConverter(shouldParseNumbers: false).convert(servicePart);
         if (serviceRows.length > 1) {
-          List<String> headers = serviceRows[0]
-              .map((h) => h.toString())
-              .toList();
+          List<String> headers = serviceRows[0].map((h) => h.toString()).toList();
           for (int i = 1; i < serviceRows.length; i++) {
-            Map<String, dynamic> rowMap = Map.fromIterables(
-                headers, serviceRows[i]);
-
+            Map<String, dynamic> rowMap = Map.fromIterables(headers, serviceRows[i]);
             rowMap['id'] = int.tryParse(rowMap['id']?.toString() ?? '');
-            rowMap['vehicleId'] =
-                int.tryParse(rowMap['vehicleId']?.toString() ?? '');
-            rowMap['mileage'] =
-                int.tryParse(rowMap['mileage']?.toString() ?? '');
-            rowMap['cost'] = int.tryParse(rowMap['cost']?.toString() ?? '0');
+            rowMap['vehicleId'] = int.tryParse(rowMap['vehicleId']?.toString() ?? '');
+            rowMap['mileage'] = int.tryParse(rowMap['mileage']?.toString() ?? '');
+            rowMap['cost'] = double.tryParse(rowMap['cost']?.toString() ?? '0')?.toInt() ?? 0;
 
             await db.insert('services', rowMap);
           }
