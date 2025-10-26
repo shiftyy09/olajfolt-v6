@@ -1,4 +1,3 @@
-// lib/widgetek/uzemanyag_ar_widget.dart
 import 'package:car_maintenance_app/szolgaltatasok/uzemanyag_ar_szolgaltatas.dart';
 import 'package:flutter/material.dart';
 
